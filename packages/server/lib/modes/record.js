@@ -18,6 +18,7 @@ const terminal = require('../util/terminal')
 const ciProvider = require('../util/ci_provider')
 const settings = require('../util/settings')
 const testsUtils = require('../util/tests_utils')
+const { fs } = require('../util/fs')
 
 const logException = (err) => {
   // give us up to 1 second to
@@ -195,7 +196,7 @@ const updateInstanceStdout = (options = {}) => {
 }
 
 const postInstanceResults = (options = {}) => {
-  const { runId, instanceId, results, group, parallel, ciBuildId } = options
+  const { runId, instanceId, results, specContents, group, parallel, ciBuildId } = options
   let { stats, tests, video, screenshots, reporterStats, error } = results
 
   video = Boolean(video)
@@ -221,6 +222,7 @@ const postInstanceResults = (options = {}) => {
     video,
     reporterStats,
     screenshots,
+    specContents,
   })
   .catch((err) => {
     debug('failed updating instance %o', {
@@ -673,35 +675,40 @@ const createRunAndRecordSpecs = (options = {}) => {
         // eslint-disable-next-line no-console
         console.log('')
 
-        return postInstanceResults({
-          group,
-          config,
-          results,
-          parallel,
-          ciBuildId,
-          instanceId,
-        })
-        .then((resp) => {
-          if (!resp) {
-            return
-          }
+        return fs.readFile(spec.absolute).then((specContents) => {
+          specContents = specContents.toString()
 
-          const { video, shouldUploadVideo, screenshots } = results
-          const { videoUploadUrl, screenshotUploadUrls } = resp
-
-          return uploadArtifacts({
-            video,
-            screenshots,
-            videoUploadUrl,
-            shouldUploadVideo,
-            screenshotUploadUrls,
+          return postInstanceResults({
+            group,
+            config,
+            results,
+            specContents,
+            parallel,
+            ciBuildId,
+            instanceId,
           })
-          .finally(() => {
-            // always attempt to upload stdout
-            // even if uploading failed
-            return updateInstanceStdout({
-              captured,
-              instanceId,
+          .then((resp) => {
+            if (!resp) {
+              return
+            }
+
+            const { video, shouldUploadVideo, screenshots } = results
+            const { videoUploadUrl, screenshotUploadUrls } = resp
+
+            return uploadArtifacts({
+              video,
+              screenshots,
+              videoUploadUrl,
+              shouldUploadVideo,
+              screenshotUploadUrls,
+            })
+            .finally(() => {
+              // always attempt to upload stdout
+              // even if uploading failed
+              return updateInstanceStdout({
+                captured,
+                instanceId,
+              })
             })
           })
         })
